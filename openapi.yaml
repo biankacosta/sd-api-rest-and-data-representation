@@ -1,0 +1,267 @@
+openapi: 3.1.0
+info:
+  title: API de Biblioteca Pessoal
+  description: API para gerenciar uma estante de livros virtual, integrada à OpenLibrary. Permite buscar, adicionar, listar, atualizar e remover livros, suportando formatos JSON, XML e Protobuf.
+  version: 1.0.0
+servers:
+  - url: http://localhost:5000
+    description: Servidor Local
+
+paths:
+  /search:
+    get:
+      summary: Busca livros na OpenLibrary
+      description: Realiza uma busca externa na OpenLibrary e retorna os resultados.
+      parameters:
+        - name: q
+          in: query
+          description: Termo de busca (título, autor, etc.)
+          required: true
+          schema:
+            type: string
+        - name: format
+          in: query
+          description: Formato da resposta.
+          schema:
+            type: string
+            enum: [json, proto]
+            default: json
+      responses:
+        '200':
+          description: Lista de livros encontrados.
+          content:
+            application/json:
+              schema:
+                type: array
+                items:
+                  type: object
+                  properties:
+                    title:
+                      type: string
+                    author_name:
+                      type: array
+                      items:
+                        type: string
+                    first_publish_year:
+                      type: integer
+                    key:
+                      type: string
+                    cover_i:
+                      type: integer
+            application/x-protobuf:
+              schema:
+                type: string
+                format: binary
+                description: Resposta serializada em Protocol Buffers (SearchResponse).
+
+  /bookshelf:
+    get:
+      summary: Listar livros na estante
+      description: Retorna todos os livros salvos na biblioteca local.
+      parameters:
+        - name: format
+          in: query
+          schema:
+            type: string
+            enum: [json, xml]
+            default: json
+      responses:
+        '200':
+          description: Lista retornada com sucesso.
+          content:
+            application/json:
+              schema:
+                type: object
+                properties:
+                  total:
+                    type: integer
+                  books:
+                    type: array
+                    items:
+                      $ref: '#/components/schemas/Book'
+            application/xml:
+              schema:
+                type: object
+                description: XML contendo a lista de livros (root <bookshelf>)
+
+    post:
+      summary: Adicionar livro à estante
+      description: Valida o ID na OpenLibrary e salva na memória local.
+      parameters:
+        - name: format
+          in: query
+          schema:
+            type: string
+            enum: [json, xml]
+            default: json
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              type: object
+              required:
+                - ol_id
+                - status
+              properties:
+                ol_id:
+                  type: string
+                  description: ID da OpenLibrary (ex. "/works/OL12345W")
+                  example: "/works/OL45804W"
+                status:
+                  type: string
+                  description: Status de leitura
+                  example: "lendo"
+                author:
+                  type: string
+                  description: Nome do autor (opcional)
+      responses:
+        '201':
+          description: Livro adicionado com sucesso.
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/SuccessResponse'
+            application/xml:
+              schema:
+                type: object
+        '400':
+          description: Dados inválidos (ID ou Status faltando).
+        '404':
+          description: Livro não encontrado na fonte externa (OpenLibrary).
+        '409':
+          description: O livro já existe na biblioteca.
+
+  /bookshelf/{id_book}:
+    put:
+      summary: Atualizar status do livro
+      description: Atualiza o status de leitura de um livro existente.
+      parameters:
+        - name: id_book
+          in: path
+          required: true
+          description: ID do livro. Nota - Caracteres '/' devem ser substituídos por '__' (ex. works__OL123W).
+          schema:
+            type: string
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              type: object
+              properties:
+                status:
+                  type: string
+                  example: "lido"
+      responses:
+        '200':
+          description: Livro atualizado.
+          content:
+            application/json:
+              schema:
+                type: object
+                properties:
+                  message:
+                    type: string
+                  book:
+                    $ref: '#/components/schemas/Book'
+        '404':
+          description: Livro não encontrado na biblioteca.
+
+    delete:
+      summary: Remover livro
+      description: Remove um livro da estante.
+      parameters:
+        - name: id_book
+          in: path
+          required: true
+          description: ID do livro (com '__' no lugar de '/').
+          schema:
+            type: string
+        - name: format
+          in: query
+          schema:
+            type: string
+            enum: [json, xml]
+            default: json
+      responses:
+        '200':
+          description: Livro removido com sucesso.
+          content:
+            application/json:
+              schema:
+                type: object
+                properties:
+                  message:
+                    type: string
+                  deleted_book:
+                    type: object
+            application/xml:
+              schema:
+                type: object
+        '404':
+          description: Livro não encontrado.
+
+  /suggestion:
+    get:
+      summary: Sugestão de livro aleatório
+      description: Busca um livro aleatório baseado em gêneros predefinidos.
+      parameters:
+        - name: format
+          in: query
+          schema:
+            type: string
+            enum: [json, xml]
+            default: json
+      responses:
+        '200':
+          description: Sugestão encontrada.
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/BookSuggestion'
+            application/xml:
+              schema:
+                type: object
+        '404':
+          description: Nenhum livro encontrado no sorteio.
+        '502':
+          description: Falha na comunicação com a API externa.
+
+components:
+  schemas:
+    Book:
+      type: object
+      properties:
+        id:
+          type: string
+        title:
+          type: string
+        author:
+          type: string
+        status:
+          type: string
+        cover_url:
+          type: string
+    
+    BookSuggestion:
+      type: object
+      properties:
+        title:
+          type: string
+        author:
+          type: string
+        year:
+          type: integer
+        id:
+          type: string
+        cover_url:
+          type: string
+
+    SuccessResponse:
+      type: object
+      properties:
+        message:
+          type: string
+        book:
+          $ref: '#/components/schemas/Book'

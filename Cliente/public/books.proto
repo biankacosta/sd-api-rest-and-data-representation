@@ -1,0 +1,13 @@
+syntax = "proto3";
+
+message BookResponse {
+  string title = 1;
+  repeated string author = 2;
+  int32 year = 3;
+  string id = 4;
+  string cover_url = 5;
+}
+
+message SearchResponse {
+  repeated BookResponse books = 1;
+}
